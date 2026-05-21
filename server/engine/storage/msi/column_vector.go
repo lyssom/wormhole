@@ -2,6 +2,7 @@ package msi
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -11,6 +12,12 @@ import (
 func WriteVectorColumn(w io.Writer, vectors [][]float32, meta *ColumnMeta) error {
 	meta.ValuesCount = uint64(len(vectors))
 	dim := meta.VectorDim
+	// Validate all vectors have correct dimension before writing
+	for i, v := range vectors {
+		if len(v) != dim {
+			return fmt.Errorf("vector %d: dimension mismatch: got %d, want %d", i, len(v), dim)
+		}
+	}
 	buf := make([]float32, len(vectors)*dim)
 	for i, v := range vectors {
 		copy(buf[i*dim:(i+1)*dim], v)
