@@ -11,9 +11,12 @@ type RowIndexBlock struct {
 	TsMax    uint64
 }
 
+// RowIndexBlockSize is the expected size of each row index block in bytes.
+// It is used to validate row offsets during read operations.
 const RowIndexBlockSize = 4096
 
-// WriteRowIndex 写入块数 + 每个块的 (TsMin, TsMax)
+// WriteRowIndex writes block count + each block's (RowOffset, TsMin, TsMax).
+// RowOffset values are validated against RowIndexBlockSize to ensure correct alignment.
 // 用于时间范围查询时二分跳转到目标块
 func WriteRowIndex(w io.Writer, blocks []*RowIndexBlock) error {
 	// 写入块数量

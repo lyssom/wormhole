@@ -26,7 +26,7 @@ func TestRowIndexRoundTrip(t *testing.T) {
 		t.Errorf("block count: got %d, want %d", len(readBack), len(blocks))
 	}
 	for i, b := range blocks {
-		if readBack[i].RowOffset != b.RowOffset || readBack[i].TsMin != b.TsMin {
+		if readBack[i].RowOffset != b.RowOffset || readBack[i].TsMin != b.TsMin || readBack[i].TsMax != b.TsMax {
 			t.Errorf("block %d mismatch: got %+v, want %+v", i, readBack[i], b)
 		}
 	}
