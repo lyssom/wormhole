@@ -25,7 +25,16 @@ func TestFooterRoundTrip(t *testing.T) {
 		t.Fatalf("ReadFooter failed: %v", err)
 	}
 
-	if len(footer2.ColumnMetas) != 2 || footer2.ColumnMetas[0].Name != "id" {
-		t.Errorf("Footer mismatch: got %+v", footer2)
+	if len(footer2.ColumnMetas) != 2 {
+		t.Errorf("ColumnMeta count: got %d, want 2", len(footer2.ColumnMetas))
+	}
+	if footer2.ColumnMetas[0].Name != "id" || footer2.ColumnMetas[0].Type != TypeInt64 {
+		t.Errorf("ColumnMeta[0] mismatch: got %+v", footer2.ColumnMetas[0])
+	}
+	if footer2.ColumnMetas[1].Name != "vec" || footer2.ColumnMetas[1].Type != TypeVectorF32 || footer2.ColumnMetas[1].VectorDim != 128 {
+		t.Errorf("ColumnMeta[1] mismatch: got %+v", footer2.ColumnMetas[1])
+	}
+	if len(footer2.AnnIndexOffsets) != 2 || footer2.AnnIndexOffsets[0] != 1024 || footer2.AnnIndexOffsets[1] != 2048 {
+		t.Errorf("AnnIndexOffsets mismatch: got %+v", footer2.AnnIndexOffsets)
 	}
 }
