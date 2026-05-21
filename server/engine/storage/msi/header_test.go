@@ -26,7 +26,7 @@ func TestHeaderRoundTrip(t *testing.T) {
 		t.Fatalf("ReadHeader failed: %v", err)
 	}
 
-	if h2.Magic != h.Magic || h2.Version != h.Version || h2.ColumnCount != h.ColumnCount || h2.RowCount != h.RowCount {
+	if h2.Magic != h.Magic || h2.Version != h.Version || h2.ColumnCount != h.ColumnCount || h2.RowCount != h.RowCount || h2.TsMin != h.TsMin || h2.TsMax != h.TsMax {
 		t.Errorf("Header mismatch: got %+v, want %+v", h2, h)
 	}
 }
