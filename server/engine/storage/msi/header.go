@@ -8,6 +8,30 @@ import (
 
 const MagicMSI = 0x4D534931 // "MSI1" in little-endian
 
+type ColumnType uint8
+
+const (
+	TypeInt32     ColumnType = 0
+	TypeInt64     ColumnType = 1
+	TypeFloat32   ColumnType = 2
+	TypeFloat64   ColumnType = 3
+	TypeByteArray ColumnType = 4 // 字符串
+	TypeVectorF32 ColumnType = 5 // 差异化：固定维度向量
+)
+
+const CompressNone = 0
+
+type ColumnMeta struct {
+	Name        string
+	Type        ColumnType
+	Offset      uint64 // 文件内偏移量
+	ValuesCount uint64
+	Compression uint8
+	// 向量列特有
+	VectorDim   int   // e.g., 128 for FLOAT[128]
+	IndexOffset int64 // ANN 索引在文件内的偏移量
+}
+
 type Header struct {
 	Magic       uint32
 	Version     uint16
