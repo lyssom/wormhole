@@ -2,6 +2,7 @@ package msi
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -60,6 +61,15 @@ func ReadHeader(r io.Reader) (*Header, error) {
 	}
 	if err := binary.Read(r, binary.LittleEndian, &h.TsMax); err != nil {
 		return nil, err
+	}
+	if h.Magic != MagicMSI {
+		return nil, fmt.Errorf("invalid magic: got 0x%08X, want 0x%08X", h.Magic, MagicMSI)
+	}
+	if h.Version != 1 {
+		return nil, fmt.Errorf("unsupported version: %d", h.Version)
+	}
+	if h.TsMax < h.TsMin {
+		return nil, fmt.Errorf("invalid timestamp range: TsMax (%d) < TsMin (%d)", h.TsMax, h.TsMin)
 	}
 	return h, nil
 }
