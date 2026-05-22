@@ -265,6 +265,17 @@ func (ms *MutableSegment) Seal(w interface{ Write([]byte) (int, error) }) (*Segm
 				}
 			}
 			typedColumns[colName] = converted
+		case []float32:
+			// Vector column: []interface{} to [][]float32
+			converted := make([][]float32, len(values))
+			for i, v := range values {
+				if iv, ok := v.([]float32); ok {
+					converted[i] = iv
+				} else {
+					return nil, fmt.Errorf("Seal: column %s has mixed types", colName)
+				}
+			}
+			typedColumns[colName] = converted
 		default:
 			return nil, fmt.Errorf("Seal: unsupported column type for %s: %T", colName, values[0])
 		}
@@ -317,6 +328,8 @@ func inferColumnType(value interface{}) msi.ColumnType {
 		return msi.TypeFloat64
 	case float32:
 		return msi.TypeFloat32
+	case []float32:
+		return msi.TypeVectorF32
 	default:
 		return msi.TypeByteArray
 	}

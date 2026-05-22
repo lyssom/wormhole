@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"wormhole/server/engine/storage/msi"
@@ -67,6 +70,43 @@ func (t *Table) Insert(rows []map[string]interface{}) error {
 	return t.mutable.Append(batch)
 }
 
+// Seal seals the mutable segment if it should be sealed.
+// Returns true if sealing occurred, false otherwise.
+func (t *Table) Seal(dir string) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if !t.mutable.ShouldSeal() {
+		return false, nil
+	}
+
+	if t.mutable.RowCount() == 0 {
+		return false, nil
+	}
+
+	// Create file path for the sealed segment
+	segNum := len(t.immutables)
+	filePath := filepath.Join(dir, fmt.Sprintf("%d.msi", segNum))
+
+	// Seal to file
+	_, err := t.mutable.SealToFile(filePath)
+	if err != nil {
+		return false, fmt.Errorf("Seal: SealToFile failed: %w", err)
+	}
+
+	// Open as immutable segment
+	imm, err := segment.OpenImmutableSegment(filePath)
+	if err != nil {
+		return false, fmt.Errorf("Seal: OpenImmutableSegment failed: %w", err)
+	}
+	t.immutables = append(t.immutables, imm)
+
+	// Clear staging after successful seal (data now in immutable)
+	t.staging = make(map[string][]interface{})
+
+	return true, nil
+}
+
 // SelectColumns returns column data for the requested columns.
 func (t *Table) SelectColumns(columns []string) (map[string]interface{}, error) {
 	t.mu.RLock()
@@ -116,4 +156,31 @@ func (t *Table) RowCount() uint64 {
 		count += imm.RowCount()
 	}
 	return count
+}
+
+// LoadImmutableSegments loads existing MSI files from dir as immutable segments.
+func (t *Table) LoadImmutableSegments(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if filepath.Ext(entry.Name()) != ".msi" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		imm, err := segment.OpenImmutableSegment(path)
+		if err != nil {
+			continue // skip corrupted files
+		}
+		t.immutables = append(t.immutables, imm)
+	}
+	return nil
 }
