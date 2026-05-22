@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"wormhole/server/engine/storage/msi"
+	"wormhole/server/storage/msi"
 )
 
 func TestImmutableSegmentRead(t *testing.T) {

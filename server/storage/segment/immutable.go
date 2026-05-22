@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"wormhole/server/engine/storage/msi"
+	"wormhole/server/storage/msi"
 )
 
 // ImmutableSegment provides read access to a sealed MSI file on disk.

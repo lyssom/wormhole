@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"wormhole/server/engine/storage/msi"
+	"wormhole/server/storage/msi"
 )
 
 func TestStorageInsertAndSelect(t *testing.T) {

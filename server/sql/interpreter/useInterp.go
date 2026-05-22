@@ -1,7 +1,7 @@
 package interpreter
 
 import (
-	"wormhole/server/query/statement"
+	"wormhole/server/sql/statement"
 )
 
 func (i Interpreter) ExecuteUse(stmt statement.UseStatement) []byte {

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"wormhole/server/engine/storage/msi"
-	"wormhole/server/engine/storage/segment"
+	"wormhole/server/storage/msi"
+	"wormhole/server/storage/segment"
 )
 
 // TableMetadata contains table-level metadata (columns and row count).

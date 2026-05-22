@@ -1,7 +1,7 @@
 package statement
 
 import (
-	"wormhole/server/query/statement/component"
+	"wormhole/server/sql/statement/component"
 )
 
 type Statement interface {

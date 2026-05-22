@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"wormhole/server/engine/storage/msi"
+	"wormhole/server/storage/msi"
 )
 
 // MutableSegment buffers rows in memory and seals to an ImmutableSegment when threshold is reached.

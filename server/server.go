@@ -25,10 +25,10 @@ import (
 	"fmt"
 
 	"wormhole/rpc/gen-go/common"
-	"wormhole/server/query"
-	"wormhole/server/query/interpreter"
-	"wormhole/server/query/parser"
-	"wormhole/server/query/statement"
+	"wormhole/server/sql"
+	"wormhole/server/sql/interpreter"
+	"wormhole/server/sql/parser"
+	"wormhole/server/sql/statement"
 
 	"github.com/antlr/antlr4/runtime/Go/antlr"
 	"github.com/apache/thrift/lib/go/thrift"

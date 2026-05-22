@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"wormhole/server/query/statement"
+	"wormhole/server/sql/statement"
 )
 
 type Interpreter struct {

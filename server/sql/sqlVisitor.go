@@ -3,9 +3,9 @@ package query
 import (
 	"github.com/antlr/antlr4/runtime/Go/antlr"
 
-	"wormhole/server/query/parser"
-	"wormhole/server/query/statement"
-	"wormhole/server/query/statement/component"
+	"wormhole/server/sql/parser"
+	"wormhole/server/sql/statement"
+	"wormhole/server/sql/statement/component"
 )
 
 type MyVisitor struct {
