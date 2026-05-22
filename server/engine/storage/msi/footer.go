@@ -3,6 +3,7 @@ package msi
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -40,6 +41,9 @@ func (f *Footer) WriteTo(w io.Writer) error {
 		if err := binary.Write(w, binary.LittleEndian, int32(col.VectorDim)); err != nil {
 			return err
 		}
+		if err := binary.Write(w, binary.LittleEndian, col.ValuesCount); err != nil {
+			return err
+		}
 	}
 
 	// Write number of ANN index offsets
@@ -67,6 +71,11 @@ func ReadFooter(r io.Reader) (*Footer, error) {
 		return nil, err
 	}
 
+	// Sanity check: limit column count to prevent allocation attacks
+	if colMetaCount > 1000 {
+		return nil, fmt.Errorf("column meta count too large: %d", colMetaCount)
+	}
+
 	// Read each column meta
 	f.ColumnMetas = make([]*ColumnMeta, colMetaCount)
 	for i := uint32(0); i < colMetaCount; i++ {
@@ -76,6 +85,11 @@ func ReadFooter(r io.Reader) (*Footer, error) {
 		var nameLen uint32
 		if err := binary.Read(r, binary.LittleEndian, &nameLen); err != nil {
 			return nil, err
+		}
+
+		// Limit name length to prevent allocation attacks
+		if nameLen > 1024 {
+			return nil, fmt.Errorf("column name too long: %d", nameLen)
 		}
 
 		// Read name bytes
@@ -97,6 +111,9 @@ func ReadFooter(r io.Reader) (*Footer, error) {
 			return nil, err
 		}
 		col.VectorDim = int(vectorDim)
+		if err := binary.Read(r, binary.LittleEndian, &col.ValuesCount); err != nil {
+			return nil, err
+		}
 
 		f.ColumnMetas[i] = col
 	}
