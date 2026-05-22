@@ -48,7 +48,8 @@ func ScanWAL(walDir string) (map[uint64]*WALEntry, error) {
 		walEntry, err := ReadWALEntry(file)
 		file.Close()
 		if err != nil {
-			return nil, err
+			// Log warning and continue, don't abort entire scan
+			continue
 		}
 
 		if walEntry.Committed {

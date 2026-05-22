@@ -33,7 +33,10 @@ func TestWALEntryRoundTrip(t *testing.T) {
 	var buf2 bytes.Buffer
 	entry2.WriteTo(&buf2)
 
-	entry3, _ := ReadWALEntry(&buf2)
+	entry3, err := ReadWALEntry(&buf2)
+	if err != nil {
+		t.Fatalf("ReadWALEntry failed: %v", err)
+	}
 	if entry3.Committed != true {
 		t.Errorf("Committed flag not set: got %v", entry3.Committed)
 	}
