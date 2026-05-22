@@ -52,10 +52,16 @@ func (t *Table) Insert(rows []map[string]interface{}) error {
 		}
 	}
 
-	// Also append to mutable segment for persistence
+	// Only append new rows to mutable segment for persistence
 	batch := make(map[string]interface{})
-	for colName, vals := range t.staging {
-		batch[colName] = vals
+	for _, row := range rows {
+		for colName, val := range row {
+			if batch[colName] == nil {
+				batch[colName] = []interface{}{val}
+			} else {
+				batch[colName] = append(batch[colName].([]interface{}), val)
+			}
+		}
 	}
 
 	return t.mutable.Append(batch)
@@ -81,13 +87,13 @@ func (t *Table) SelectColumns(columns []string) (map[string]interface{}, error) 
 		if err != nil {
 			return nil, err
 		}
-		// Merge into result
+		// Merge into result - prepend staging data before immutable data
 		for colName, colData := range cols {
 			if _, ok := result[colName]; !ok {
 				result[colName] = colData
 			} else {
-				// Merge - append immutable data to staging data
-				result[colName] = colData
+				// Prepend immutable data after staging data
+				result[colName] = append(result[colName].([]interface{}), colData.([]interface{})...)
 			}
 		}
 	}

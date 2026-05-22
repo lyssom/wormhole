@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // StorageEngine provides the top-level API for inserting and selecting data.
@@ -12,6 +13,7 @@ type StorageEngine struct {
 	rootDir string
 	tables  map[string]*Table // key: "db/table"
 	opts    *Options
+	mu      sync.RWMutex
 }
 
 // NewStorageEngine creates a new StorageEngine rooted at rootDir.
@@ -64,6 +66,34 @@ func (e *StorageEngine) CreateTable(db, table string, meta *TableMetadata) error
 	e.tables[key] = newTable(db, table, meta, nil)
 
 	return nil
+}
+
+// GetOrCreateTable returns an existing table or creates a new one.
+func (e *StorageEngine) GetOrCreateTable(db, table string, meta *TableMetadata) (*Table, error) {
+	key := tableKey(db, table)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if t, ok := e.tables[key]; ok {
+		return t, nil
+	}
+
+	// Create table directory
+	tablePath := e.dataPath(db, table)
+	if err := ensureDir(tablePath); err != nil {
+		return nil, fmt.Errorf("GetOrCreateTable: mkdir failed: %w", err)
+	}
+
+	// Write table metadata to table.json
+	metaPath := filepath.Join(tablePath, "table.json")
+	if err := writeTableMetadata(metaPath, meta); err != nil {
+		return nil, fmt.Errorf("GetOrCreateTable: write metadata failed: %w", err)
+	}
+
+	// Create and register the table
+	t := newTable(db, table, meta, nil)
+	e.tables[key] = t
+
+	return t, nil
 }
 
 // Insert inserts rows into the specified table.
