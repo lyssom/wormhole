@@ -49,4 +49,40 @@ func TestImmutableSegmentRead(t *testing.T) {
 	if len(cols) != 2 {
 		t.Errorf("column count: got %d, want 2", len(cols))
 	}
+
+	// Verify id column data
+	ids, ok := cols["id"].([]int64)
+	if !ok {
+		t.Fatalf("id column type: got %T, want []int64", cols["id"])
+	}
+	if len(ids) != 50 {
+		t.Errorf("id column length: got %d, want 50", len(ids))
+	}
+	for i, id := range ids {
+		if id != int64(i) {
+			t.Errorf("id[%d]: got %d, want %d", i, id, int64(i))
+		}
+	}
+
+	// Verify vec column data
+	vecs, ok := cols["vec"].([][]float32)
+	if !ok {
+		t.Fatalf("vec column type: got %T, want [][]float32", cols["vec"])
+	}
+	if len(vecs) != 50 {
+		t.Errorf("vec column length: got %d, want 50", len(vecs))
+	}
+	for i, v := range vecs {
+		if len(v) != 128 {
+			t.Errorf("vec[%d] dim: got %d, want 128", i, len(v))
+		}
+		if v[0] != float32(i) {
+			t.Errorf("vec[%d][0]: got %f, want %f", i, v[0], float32(i))
+		}
+	}
+
+	// Verify RowCount
+	if seg.RowCount() != 50 {
+		t.Errorf("RowCount: got %d, want 50", seg.RowCount())
+	}
 }
