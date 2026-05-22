@@ -274,15 +274,15 @@ func (ms *MutableSegment) Seal(w interface{ Write([]byte) (int, error) }) (*Segm
 		return nil, fmt.Errorf("Seal: WriteMSI failed: %w", err)
 	}
 
+	// Only reset after successful write
+	ms.columns = make(map[string][]interface{})
+	ms.rowCount = 0
+
 	// Get the path from the writer (if it has a Name method)
 	path := ""
 	if f, ok := w.(interface{ Name() string }); ok {
 		path = f.Name()
 	}
-
-	// Reset the segment after sealing
-	ms.columns = make(map[string][]interface{})
-	ms.rowCount = 0
 
 	return &SegmentInstance{
 		path:     path,
