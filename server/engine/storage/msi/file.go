@@ -136,8 +136,8 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 
 	var footer *Footer
 	// Search backwards from near the end, checking for valid footer
-	// Start from totalLen - 100 (approximately footer size for small files)
-	searchStart := totalLen - 100
+	// Start from totalLen - 32 (minimum reasonable distance from end)
+	searchStart := totalLen - 32
 	if searchStart < 32 {
 		searchStart = 32
 	}
