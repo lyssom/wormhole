@@ -11,10 +11,13 @@ type Statement interface {
 type QueryStatement struct {
 	SelectComponent component.SelectComponent
 	FromComponent   component.FromComponent
-	// whereCondition component.whereCondition
-	RowLimit  int
-	RowOffset int
-	Kind      string
+	WhereCondition  component.FilterComponent
+	GroupByComponent component.GroupByComponent
+	HavingCondition component.HavingComponent
+	OrderByComponent component.OrderByComponent
+	RowLimit        int
+	RowOffset       int
+	Kind            string
 }
 
 func (q QueryStatement) GetKind() string {

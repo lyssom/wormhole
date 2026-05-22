@@ -1,4 +1,4 @@
-// Code generated from java-escape by ANTLR 4.11.1. DO NOT EDIT.
+// Code generated from SqlParser.g4 by ANTLR 4.10.1. DO NOT EDIT.
 
 package parser // SqlParser
 
@@ -38,6 +38,15 @@ type SqlParserVisitor interface {
 	// Visit a parse tree produced by SqlParser#insertStatement.
 	VisitInsertStatement(ctx *InsertStatementContext) interface{}
 
+	// Visit a parse tree produced by SqlParser#updateStatement.
+	VisitUpdateStatement(ctx *UpdateStatementContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#deleteStatement.
+	VisitDeleteStatement(ctx *DeleteStatementContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#setClause.
+	VisitSetClause(ctx *SetClauseContext) interface{}
+
 	// Visit a parse tree produced by SqlParser#columnsClause.
 	VisitColumnsClause(ctx *ColumnsClauseContext) interface{}
 
@@ -56,8 +65,41 @@ type SqlParserVisitor interface {
 	// Visit a parse tree produced by SqlParser#fromClause.
 	VisitFromClause(ctx *FromClauseContext) interface{}
 
+	// Visit a parse tree produced by SqlParser#whereClause.
+	VisitWhereClause(ctx *WhereClauseContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#groupByClause.
+	VisitGroupByClause(ctx *GroupByClauseContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#havingClause.
+	VisitHavingClause(ctx *HavingClauseContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#orderByClause.
+	VisitOrderByClause(ctx *OrderByClauseContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#orderByExpr.
+	VisitOrderByExpr(ctx *OrderByExprContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#limitClause.
+	VisitLimitClause(ctx *LimitClauseContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#offsetClause.
+	VisitOffsetClause(ctx *OffsetClauseContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#searchCondition.
+	VisitSearchCondition(ctx *SearchConditionContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#predicate.
+	VisitPredicate(ctx *PredicateContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#expression.
+	VisitExpression(ctx *ExpressionContext) interface{}
+
 	// Visit a parse tree produced by SqlParser#joinExpr.
 	VisitJoinExpr(ctx *JoinExprContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#joinOp.
+	VisitJoinOp(ctx *JoinOpContext) interface{}
 
 	// Visit a parse tree produced by SqlParser#useStatement.
 	VisitUseStatement(ctx *UseStatementContext) interface{}
@@ -73,6 +115,9 @@ type SqlParserVisitor interface {
 
 	// Visit a parse tree produced by SqlParser#columnExpr.
 	VisitColumnExpr(ctx *ColumnExprContext) interface{}
+
+	// Visit a parse tree produced by SqlParser#aggregateFunction.
+	VisitAggregateFunction(ctx *AggregateFunctionContext) interface{}
 
 	// Visit a parse tree produced by SqlParser#columnIdentifier.
 	VisitColumnIdentifier(ctx *ColumnIdentifierContext) interface{}

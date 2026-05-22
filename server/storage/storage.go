@@ -121,6 +121,28 @@ func (e *StorageEngine) SelectColumns(db, table string, columns []string) (map[s
 	return t.SelectColumns(columns)
 }
 
+// UpdateRow updates a specific row at index rowIdx in the table.
+func (e *StorageEngine) UpdateRow(db, table string, rowIdx int, updates map[string]interface{}) error {
+	key := tableKey(db, table)
+	t, exists := e.tables[key]
+	if !exists {
+		return fmt.Errorf("UpdateRow: table %s.%s not found", db, table)
+	}
+
+	return t.UpdateRow(rowIdx, updates)
+}
+
+// DeleteRow deletes a row at index rowIdx from the table.
+func (e *StorageEngine) DeleteRow(db, table string, rowIdx int) error {
+	key := tableKey(db, table)
+	t, exists := e.tables[key]
+	if !exists {
+		return fmt.Errorf("DeleteRow: table %s.%s not found", db, table)
+	}
+
+	return t.DeleteRow(rowIdx)
+}
+
 // writeTableMetadata writes the table metadata to a JSON file.
 func writeTableMetadata(path string, meta *TableMetadata) error {
 	data, err := json.Marshal(meta)

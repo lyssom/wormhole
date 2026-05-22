@@ -83,6 +83,10 @@ func Execute(stat statement.Statement, usedDB string) []byte {
 		resp = interp.ExecuteCreateTable(stat.(statement.CreateTableStatement))
 	case "insert":
 		resp = interp.ExecuteInsert(stat.(statement.InsertStatement))
+	case "update":
+		resp = interp.ExecuteUpdate(stat.(statement.UpdateStatement))
+	case "delete":
+		resp = interp.ExecuteDelete(stat.(statement.DeleteStatement))
 	case "use":
 		resp = interp.ExecuteUse(stat.(statement.UseStatement))
 	}

@@ -1,4 +1,4 @@
-// Code generated from java-escape by ANTLR 4.11.1. DO NOT EDIT.
+// Code generated from SqlParser.g4 by ANTLR 4.10.1. DO NOT EDIT.
 
 package parser // SqlParser
 
@@ -48,6 +48,18 @@ func (v *BaseSqlParserVisitor) VisitInsertStatement(ctx *InsertStatementContext)
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseSqlParserVisitor) VisitUpdateStatement(ctx *UpdateStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitDeleteStatement(ctx *DeleteStatementContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitSetClause(ctx *SetClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseSqlParserVisitor) VisitColumnsClause(ctx *ColumnsClauseContext) interface{} {
 	return v.VisitChildren(ctx)
 }
@@ -72,7 +84,51 @@ func (v *BaseSqlParserVisitor) VisitFromClause(ctx *FromClauseContext) interface
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseSqlParserVisitor) VisitWhereClause(ctx *WhereClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitGroupByClause(ctx *GroupByClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitHavingClause(ctx *HavingClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitOrderByClause(ctx *OrderByClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitOrderByExpr(ctx *OrderByExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitLimitClause(ctx *LimitClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitOffsetClause(ctx *OffsetClauseContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitSearchCondition(ctx *SearchConditionContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitPredicate(ctx *PredicateContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitExpression(ctx *ExpressionContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseSqlParserVisitor) VisitJoinExpr(ctx *JoinExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitJoinOp(ctx *JoinOpContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
@@ -93,6 +149,10 @@ func (v *BaseSqlParserVisitor) VisitColumnsExpr(ctx *ColumnsExprContext) interfa
 }
 
 func (v *BaseSqlParserVisitor) VisitColumnExpr(ctx *ColumnExprContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *BaseSqlParserVisitor) VisitAggregateFunction(ctx *AggregateFunctionContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 

@@ -19,24 +19,46 @@ WS
 
 // Common Keywords
 
+AND: A N D;
+ASC: A S C;
+AVG: A V G;
+BY: B Y;
+COUNT: C O U N T;
 CREATE: C R E A T E;
 DATABASE: D A T A B A S E;
 DEFAULT: D E F A U L T;
+DELETE: D E L E T E;
+DESC: D E S C;
 EXISTS: E X I S T S;
 FROM: F R O M;
+GROUP: G R O U P;
+HAVING: H A V I N G;
 IF: I F;
 INF: I N F | I N F I N I T Y;
+INNER: I N N E R;
 INSERT: I N S E R T;
 INTO: I N T O;
+JOIN: J O I N;
+LEFT: L E F T;
+LIMIT: L I M I T;
+MAX: M A X;
+MIN: M I N;
 NAN_SQL: N A N;
 NOT: N O T;
 NULL_SQL: N U L L;
+OFFSET: O F F S E T;
+ON: O N;
+OR: O R;
+ORDER: O R D E R;
 SELECT: S E L E C T;
 SET: S E T;
+SUM: S U M;
 TABLE: T A B L E;
+UPDATE: U P D A T E;
 USE: U S E;
 VALUE: V A L U E;
 VALUES: V A L U E S;
+WHERE: W H E R E;
 
 
 // interval keywords

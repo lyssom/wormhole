@@ -158,6 +158,47 @@ func (t *Table) RowCount() uint64 {
 	return count
 }
 
+// UpdateRow updates a specific row at the given index.
+func (t *Table) UpdateRow(rowIdx int, updates map[string]interface{}) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Update staging data
+	for colName, val := range updates {
+		arr, ok := t.staging[colName]
+		if !ok {
+			t.staging[colName] = make([]interface{}, rowIdx+1)
+		}
+		if rowIdx < len(arr) {
+			arr[rowIdx] = val
+		} else {
+			// Extend the slice
+			for i := len(arr); i <= rowIdx; i++ {
+				arr = append(arr, nil)
+			}
+			arr[rowIdx] = val
+			t.staging[colName] = arr
+		}
+	}
+
+	return nil
+}
+
+// DeleteRow deletes a row at the given index by removing it from all column arrays.
+func (t *Table) DeleteRow(rowIdx int) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Remove from staging
+	for colName, arr := range t.staging {
+		if rowIdx < len(arr) {
+			t.staging[colName] = append(arr[:rowIdx], arr[rowIdx+1:]...)
+		}
+	}
+
+	return nil
+}
+
 // LoadImmutableSegments loads existing MSI files from dir as immutable segments.
 func (t *Table) LoadImmutableSegments(dir string) error {
 	entries, err := os.ReadDir(dir)

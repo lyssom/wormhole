@@ -15,6 +15,8 @@ statement
 dmlStatement
     : selectStatement
     | insertStatement
+    | updateStatement
+    | deleteStatement
     ;
 
 ddlStatement
@@ -56,6 +58,12 @@ tableColumnDfnt
 
 insertStatement: INSERT INTO TABLE? (tableIdentifier) columnsClause? VALUES insertValuesSpec;
 
+updateStatement: UPDATE tableIdentifier SET setClause (COMMA setClause)* whereClause?;
+
+deleteStatement: DELETE FROM tableIdentifier whereClause?;
+
+setClause: columnIdentifier EQ_SINGLE expression;
+
 columnsClause: LPAREN nestedIdentifier (COMMA nestedIdentifier)* RPAREN;
 
 insertValuesSpec
@@ -76,13 +84,64 @@ dataValue
 selectStatement
     : SELECT columnExprList
       fromClause?
+      whereClause?
+      groupByClause?
+      havingClause?
+      orderByClause?
+      limitClause?
+      offsetClause?
     ;
 
 fromClause: FROM joinExpr;
 
+whereClause: WHERE searchCondition;
+
+groupByClause: GROUP BY columnIdentifier (COMMA columnIdentifier)*;
+
+havingClause: HAVING searchCondition;
+
+orderByClause: ORDER BY orderByExpr (COMMA orderByExpr)*;
+
+orderByExpr: columnIdentifier (ASC | DESC)?;
+
+limitClause: LIMIT DECIMAL_LITERAL;
+
+offsetClause: OFFSET DECIMAL_LITERAL;
+
+searchCondition
+    : searchCondition AND searchCondition
+    | searchCondition OR searchCondition
+    | NOT searchCondition
+    | predicate
+    ;
+
+predicate
+    : expression EQ_SINGLE expression
+    | expression NOT_EQ expression
+    | expression LT expression
+    | expression LE expression
+    | expression GT expression
+    | expression GE expression
+    ;
+
+expression
+    : literal
+    | columnIdentifier
+    | expression ASTERISK expression
+    | expression SLASH expression
+    | expression PERCENT expression
+    | expression PLUS expression
+    | expression DASH expression
+    ;
+
 
 joinExpr
-    : tableExpr
+    : tableExpr (joinOp tableExpr ON searchCondition)*
+    ;
+
+joinOp
+    : INNER? JOIN
+    | LEFT JOIN
     ;
 
 
@@ -112,7 +171,17 @@ columnsExpr
 
 columnExpr
     : literal
-    | columnIdentifier;
+    | columnIdentifier
+    | aggregateFunction
+    ;
+
+aggregateFunction
+    : COUNT LPAREN (ASTERISK | expression) RPAREN
+    | SUM LPAREN expression RPAREN
+    | AVG LPAREN expression RPAREN
+    | MIN LPAREN expression RPAREN
+    | MAX LPAREN expression RPAREN
+    ;
 
 columnIdentifier: (tableIdentifier DOT)? nestedIdentifier;
 nestedIdentifier: identifier (DOT identifier)?;

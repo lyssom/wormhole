@@ -1,0 +1,6 @@
+# Wormhole Database Configuration
+storage:
+  # Data storage path (default: ./data relative to server binary)
+  data_path: "./data"
+  mutable_max_rows: 100000
+  bucket_duration_ms: 3600000
