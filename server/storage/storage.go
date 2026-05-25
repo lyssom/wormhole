@@ -63,7 +63,7 @@ func (e *StorageEngine) CreateTable(db, table string, meta *TableMetadata) error
 	}
 
 	// Create and register the table
-	e.tables[key] = newTable(db, table, meta, nil)
+	e.tables[key] = newTable(db, table, meta, nil, e.opts.BucketDurationMs)
 
 	return nil
 }
@@ -90,7 +90,7 @@ func (e *StorageEngine) GetOrCreateTable(db, table string, meta *TableMetadata) 
 	}
 
 	// Create and register the table
-	t := newTable(db, table, meta, nil)
+	t := newTable(db, table, meta, nil, e.opts.BucketDurationMs)
 	e.tables[key] = t
 
 	return t, nil
@@ -150,4 +150,20 @@ func writeTableMetadata(path string, meta *TableMetadata) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+// Tables returns all tables in the engine.
+func (e *StorageEngine) Tables() []*Table {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	tables := make([]*Table, 0, len(e.tables))
+	for _, t := range e.tables {
+		tables = append(tables, t)
+	}
+	return tables
+}
+
+// RootDir returns the engine's root directory.
+func (e *StorageEngine) RootDir() string {
+	return e.rootDir
 }

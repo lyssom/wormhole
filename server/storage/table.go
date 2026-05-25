@@ -3,137 +3,207 @@ package storage
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"wormhole/server/storage/msi"
+	"wormhole/server/storage/partition"
 	"wormhole/server/storage/segment"
 )
 
 // TableMetadata contains table-level metadata (columns and row count).
 type TableMetadata = msi.TableMetadata
 
+// RowLocation tracks where a logical row lives in the storage.
+type RowLocation struct {
+	PartitionKey string
+	IsMutable    bool
+	SegmentIndex int   // for immutables, the segment index
+	LocalIndex   int   // index within the segment's column arrays
+}
+
 // Table represents an open table with its mutable segment.
 type Table struct {
-	name       string
-	db         string
-	metadata   *TableMetadata
-	mutable    *segment.MutableSegment
-	immutables []*segment.ImmutableSegment
-	opts       *TableOptions
-	mu         sync.RWMutex
+	name     string
+	db       string
+	metadata *TableMetadata
+	pm       *partition.PartitionManager
+	opts     *TableOptions
+	mu       sync.RWMutex
 
-	// Staging rows for reading before seal (column-oriented)
-	staging map[string][]interface{}
+	// Row tracking for UpdateRow/DeleteRow
+	nextRowID    int                   // global counter for row IDs
+	rowIDToLoc   map[int]RowLocation    // rowID -> location in partitions
+	pendingUpd   map[int]map[string]interface{} // rowID -> column updates
+	pendingDel   map[int]bool          // rowID -> deleted
 }
 
 // newTable creates a new Table.
-func newTable(db, name string, meta *TableMetadata, opts *TableOptions) *Table {
+func newTable(db, name string, meta *TableMetadata, opts *TableOptions, bucketMs int64) *Table {
 	if opts == nil {
 		opts = DefaultTableOptions()
+	}
+	if bucketMs == 0 {
+		bucketMs = DefaultOptions().BucketDurationMs
 	}
 	return &Table{
 		name:       name,
 		db:         db,
 		metadata:   meta,
-		mutable:    segment.NewMutableSegment(name),
-		immutables: make([]*segment.ImmutableSegment, 0),
+		pm:         partition.NewPartitionManager(bucketMs),
 		opts:       opts,
-		staging:    make(map[string][]interface{}),
+		nextRowID:   0,
+		rowIDToLoc:  make(map[int]RowLocation),
+		pendingUpd:  make(map[int]map[string]interface{}),
+		pendingDel: make(map[int]bool),
 	}
 }
 
-// Insert inserts rows into the table's mutable segment.
+// Insert inserts rows into the table's partition based on timestamp.
 func (t *Table) Insert(rows []map[string]interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Convert rows to column-oriented format and stage for reading
-	for _, row := range rows {
-		for colName, val := range row {
-			t.staging[colName] = append(t.staging[colName], val)
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// Extract timestamp from first row to determine partition
+	var ts uint64 = 0
+	if tsVal, ok := rows[0]["ts"].(int64); ok {
+		ts = uint64(tsVal)
+	}
+
+	part := t.pm.GetOrCreatePartition(ts)
+
+	// Get starting global row ID before insert
+	startRowID := t.nextRowID
+
+	// Append to partition's mutable segment
+	if err := part.Insert(rows); err != nil {
+		return err
+	}
+
+	// Track row locations for each inserted row
+	numRows := len(rows)
+	for i := 0; i < numRows; i++ {
+		t.rowIDToLoc[startRowID+i] = RowLocation{
+			PartitionKey: part.Key(),
+			IsMutable:    true,
+			SegmentIndex: 0,
+			LocalIndex:   int(part.NextInsertIndex()) - numRows + i,
 		}
 	}
 
-	// Only append new rows to mutable segment for persistence
-	batch := make(map[string]interface{})
-	for _, row := range rows {
-		for colName, val := range row {
-			if batch[colName] == nil {
-				batch[colName] = []interface{}{val}
-			} else {
-				batch[colName] = append(batch[colName].([]interface{}), val)
-			}
-		}
-	}
+	// Increment global row ID
+	t.nextRowID += numRows
 
-	return t.mutable.Append(batch)
+	return nil
 }
 
-// Seal seals the mutable segment if it should be sealed.
-// Returns true if sealing occurred, false otherwise.
+// Seal seals all partitions' mutable segments if they should be sealed.
+// Returns true if any sealing occurred, false otherwise.
 func (t *Table) Seal(dir string) (bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if !t.mutable.ShouldSeal() {
-		return false, nil
+	sealed := false
+	for _, part := range t.pm.Partitions() {
+		if part.ShouldSeal() {
+			s, err := part.Seal(dir)
+			if err != nil {
+				return sealed, fmt.Errorf("Seal: %w", err)
+			}
+			if s {
+				sealed = true
+			}
+		}
 	}
-
-	if t.mutable.RowCount() == 0 {
-		return false, nil
-	}
-
-	// Create file path for the sealed segment
-	segNum := len(t.immutables)
-	filePath := filepath.Join(dir, fmt.Sprintf("%d.msi", segNum))
-
-	// Seal to file
-	_, err := t.mutable.SealToFile(filePath)
-	if err != nil {
-		return false, fmt.Errorf("Seal: SealToFile failed: %w", err)
-	}
-
-	// Open as immutable segment
-	imm, err := segment.OpenImmutableSegment(filePath)
-	if err != nil {
-		return false, fmt.Errorf("Seal: OpenImmutableSegment failed: %w", err)
-	}
-	t.immutables = append(t.immutables, imm)
-
-	// Clear staging after successful seal (data now in immutable)
-	t.staging = make(map[string][]interface{})
-
-	return true, nil
+	return sealed, nil
 }
 
 // SelectColumns returns column data for the requested columns.
+// It applies pending updates and filters deleted rows.
 func (t *Table) SelectColumns(columns []string) (map[string]interface{}, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	result := make(map[string]interface{})
-
-	// Read from staging (mutable, unsealed data)
+	// Initialize result columns as empty slices
 	for _, col := range columns {
-		if colData, ok := t.staging[col]; ok {
-			result[col] = colData
-		}
+		result[col] = []interface{}{}
 	}
 
-	// Read from immutable segments
-	for _, imm := range t.immutables {
-		cols, err := imm.ReadColumns(columns)
+	// Track global row index as we read
+	globalRowIdx := 0
+
+	// Read from all partitions (mutable and immutable)
+	for _, part := range t.pm.Partitions() {
+		// Read from mutable (unsealed data)
+		mutableCols, err := part.ReadMutableColumns(columns)
 		if err != nil {
 			return nil, err
 		}
-		// Merge into result - prepend staging data before immutable data
-		for colName, colData := range cols {
-			if _, ok := result[colName]; !ok {
-				result[colName] = colData
-			} else {
-				// Prepend immutable data after staging data
-				result[colName] = append(result[colName].([]interface{}), colData.([]interface{})...)
+
+		mutableRowCount := int(part.MutableRowCount())
+		for localIdx := 0; localIdx < mutableRowCount; localIdx++ {
+			// Check if this row is deleted
+			if t.pendingDel[globalRowIdx] {
+				globalRowIdx++
+				continue
+			}
+
+			// Apply pending updates if any
+			rowUpdates := t.pendingUpd[globalRowIdx]
+
+			// Add each column value (applying updates if needed)
+			for _, colName := range columns {
+				var val interface{}
+				if colData, ok := mutableCols[colName].([]interface{}); ok && localIdx < len(colData) {
+					val = colData[localIdx]
+					// Apply pending update for this column if exists
+					if rowUpdates != nil {
+						if updVal, ok := rowUpdates[colName]; ok {
+							val = updVal
+						}
+					}
+				}
+				result[colName] = append(result[colName].([]interface{}), val)
+			}
+			globalRowIdx++
+		}
+
+		// Read from immutable segments
+		for _, imm := range part.ImmutableSegments() {
+			cols, err := imm.ReadColumns(columns)
+			if err != nil {
+				return nil, err
+			}
+			immRowCount := int(imm.RowCount())
+			for localIdx := 0; localIdx < immRowCount; localIdx++ {
+				// Check if this row is deleted
+				if t.pendingDel[globalRowIdx] {
+					globalRowIdx++
+					continue
+				}
+
+				// Apply pending updates if any
+				rowUpdates := t.pendingUpd[globalRowIdx]
+
+				// Add each column value (applying updates if needed)
+				for _, colName := range columns {
+					var val interface{}
+					if colData, ok := cols[colName].([]interface{}); ok && localIdx < len(colData) {
+						val = colData[localIdx]
+						// Apply pending update for this column if exists
+						if rowUpdates != nil {
+							if updVal, ok := rowUpdates[colName]; ok {
+								val = updVal
+							}
+						}
+					}
+					result[colName] = append(result[colName].([]interface{}), val)
+				}
+				globalRowIdx++
 			}
 		}
 	}
@@ -141,65 +211,100 @@ func (t *Table) SelectColumns(columns []string) (map[string]interface{}, error) 
 	return result, nil
 }
 
-// RowCount returns the total number of rows (staging + immutable).
+// appendSlice appends src to dst, handling type conversion to []interface{}.
+func appendSlice(dst, src interface{}) []interface{} {
+	dstSlice := toInterfaceSlice(dst)
+	srcSlice := toInterfaceSlice(src)
+	return append(dstSlice, srcSlice...)
+}
+
+// toInterfaceSlice converts a typed slice to []interface{}.
+func toInterfaceSlice(v interface{}) []interface{} {
+	switch s := v.(type) {
+	case []interface{}:
+		return s
+	case []int64:
+		result := make([]interface{}, len(s))
+		for i, val := range s {
+			result[i] = val
+		}
+		return result
+	case []int32:
+		result := make([]interface{}, len(s))
+		for i, val := range s {
+			result[i] = val
+		}
+		return result
+	case []float32:
+		result := make([]interface{}, len(s))
+		for i, val := range s {
+			result[i] = val
+		}
+		return result
+	case []float64:
+		result := make([]interface{}, len(s))
+		for i, val := range s {
+			result[i] = val
+		}
+		return result
+	case [][]float32:
+		result := make([]interface{}, len(s))
+		for i, val := range s {
+			result[i] = val
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+// RowCount returns the total number of rows in all partitions.
 func (t *Table) RowCount() uint64 {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	count := uint64(0)
-	for _, col := range t.staging {
-		if len(col) > int(count) {
-			count = uint64(len(col))
-		}
-	}
-	for _, imm := range t.immutables {
-		count += imm.RowCount()
+	for _, part := range t.pm.Partitions() {
+		count += part.RowCount()
 	}
 	return count
 }
 
 // UpdateRow updates a specific row at the given index.
+// Updates are stored as pending and applied during SelectColumns.
+// This approach works for both mutable and immutable segments.
 func (t *Table) UpdateRow(rowIdx int, updates map[string]interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Update staging data
-	for colName, val := range updates {
-		arr, ok := t.staging[colName]
-		if !ok {
-			t.staging[colName] = make([]interface{}, rowIdx+1)
-		}
-		if rowIdx < len(arr) {
-			arr[rowIdx] = val
-		} else {
-			// Extend the slice
-			for i := len(arr); i <= rowIdx; i++ {
-				arr = append(arr, nil)
-			}
-			arr[rowIdx] = val
-			t.staging[colName] = arr
-		}
+	// Just store the pending update - SelectColumns will apply it
+	if t.pendingUpd == nil {
+		t.pendingUpd = make(map[int]map[string]interface{})
 	}
-
+	// Merge with existing pending updates
+	if existing, ok := t.pendingUpd[rowIdx]; ok {
+		for k, v := range updates {
+			existing[k] = v
+		}
+	} else {
+		t.pendingUpd[rowIdx] = updates
+	}
 	return nil
 }
 
-// DeleteRow deletes a row at the given index by removing it from all column arrays.
+// DeleteRow deletes a row at the given index.
 func (t *Table) DeleteRow(rowIdx int) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Remove from staging
-	for colName, arr := range t.staging {
-		if rowIdx < len(arr) {
-			t.staging[colName] = append(arr[:rowIdx], arr[rowIdx+1:]...)
-		}
+	if t.pendingDel == nil {
+		t.pendingDel = make(map[int]bool)
 	}
-
+	t.pendingDel[rowIdx] = true
 	return nil
 }
 
-// LoadImmutableSegments loads existing MSI files from dir as immutable segments.
+// LoadImmutableSegments loads existing MSI files from partition directories.
 func (t *Table) LoadImmutableSegments(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -210,18 +315,84 @@ func (t *Table) LoadImmutableSegments(dir string) error {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if !entry.IsDir() {
 			continue
 		}
-		if filepath.Ext(entry.Name()) != ".msi" {
+		// Check if it's a bucket directory (bucket_<timestamp>)
+		name := entry.Name()
+		if len(name) < 7 || name[:7] != "bucket_" {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
-		imm, err := segment.OpenImmutableSegment(path)
-		if err != nil {
-			continue // skip corrupted files
+
+		// Create partition for this bucket
+		part := t.pm.GetOrCreatePartition(0) // ts=0 will create bucket_0
+
+		// Load immutable segments from this partition
+		if err := part.LoadImmutableSegments(dir); err != nil {
+			return err
 		}
-		t.immutables = append(t.immutables, imm)
 	}
 	return nil
+}
+
+// Name returns the table name.
+func (t *Table) Name() string {
+	return t.name
+}
+
+// DB returns the database name.
+func (t *Table) DB() string {
+	return t.db
+}
+
+// ImmutableSegments returns all immutable segments from all partitions.
+func (t *Table) ImmutableSegments() []*segment.ImmutableSegment {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	var result []*segment.ImmutableSegment
+	for _, part := range t.pm.Partitions() {
+		result = append(result, part.ImmutableSegments()...)
+	}
+	return result
+}
+
+// SchedulerSegments returns segments grouped by partition for merge scheduling.
+func (t *Table) SchedulerSegments() map[string][]*segment.ImmutableSegment {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	result := make(map[string][]*segment.ImmutableSegment)
+	for _, part := range t.pm.Partitions() {
+		result[part.Key()] = part.ImmutableSegments()
+	}
+	return result
+}
+
+// Partitions returns all partitions.
+func (t *Table) Partitions() []*partition.Partition {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.pm.Partitions()
+}
+
+// ReplaceImmutableSegments replaces old segments with a new one after merge.
+// It finds which partition contains the old segments and calls ReplaceImmutables on it.
+func (t *Table) ReplaceImmutableSegments(oldPaths []string, newPath string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Build set of old paths
+	oldSet := make(map[string]bool)
+	for _, p := range oldPaths {
+		oldSet[p] = true
+	}
+
+	// Find the partition that contains the old segments
+	for _, part := range t.pm.Partitions() {
+		for _, imm := range part.ImmutableSegments() {
+			if oldSet[imm.Path()] {
+				return part.ReplaceImmutables(oldPaths, newPath)
+			}
+		}
+	}
+	return fmt.Errorf("ReplaceImmutableSegments: no partition found for old paths")
 }

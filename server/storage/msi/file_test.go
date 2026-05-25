@@ -39,9 +39,12 @@ func TestFullMSIFileRoundTrip(t *testing.T) {
 	}
 
 	// 读回
-	m, cols, err := ReadMSI(&buf)
+	m, cols, skipData, err := ReadMSI(&buf)
 	if err != nil {
 		t.Fatalf("ReadMSI failed: %v", err)
+	}
+	if skipData == nil {
+		t.Errorf("skipData should not be nil after WriteMSI")
 	}
 	if m.RowCount != 100 {
 		t.Errorf("RowCount: got %d, want 100", m.RowCount)

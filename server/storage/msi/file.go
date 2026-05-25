@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+
+	"wormhole/server/storage/index"
 )
 
 // TableMetadata contains table-level metadata (columns and row count).
@@ -12,6 +14,21 @@ type TableMetadata struct {
 	Columns  []*ColumnMeta
 	RowCount uint64
 }
+
+// Implement index.TableMetadata interface
+func (m *TableMetadata) GetRowCount() uint64 { return m.RowCount }
+func (m *TableMetadata) GetColumns() []index.ColumnMetaInfo {
+	result := make([]index.ColumnMetaInfo, len(m.Columns))
+	for i, c := range m.Columns {
+		result[i] = c
+	}
+	return result
+}
+
+// ColumnMeta contains metadata for a single column.
+// Implement index.ColumnMetaInfo interface
+func (c *ColumnMeta) GetName() string { return c.Name }
+func (c *ColumnMeta) GetType() int { return int(c.Type) }
 
 // WriteMSI writes a complete MSI file to w.
 // Layout: [Header 32B] → [Column 1 data] → [Column 2 data] → ... → [RowIndex] → [Footer]
@@ -94,9 +111,17 @@ func WriteMSI(w io.Writer, meta *TableMetadata, columns map[string]interface{}) 
 	}
 
 	// Write Footer with ColumnMetas (includes offsets)
+	// Build skip index for query optimization
+	skipIdx := index.BuildFromMSI(meta, columns, 1000)
+	skipIndexData, err := skipIdx.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("writing footer: marshaling skip index: %w", err)
+	}
+
 	footer := &Footer{
 		ColumnMetas:     meta.Columns,
 		AnnIndexOffsets: make([]int64, len(meta.Columns)), // no ANN index for now
+		SkipIndexData:   skipIndexData,
 	}
 	if err := footer.WriteTo(w); err != nil {
 		return fmt.Errorf("writing footer: %w", err)
@@ -107,11 +132,12 @@ func WriteMSI(w io.Writer, meta *TableMetadata, columns map[string]interface{}) 
 
 // ReadMSI reads a complete MSI file.
 // Layout: [Header 32B] → [Column 1 data] → [Column 2 data] → ... → [RowIndex] → [Footer]
-func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
+// Returns meta, columns, skipIndexData, error
+func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, []byte, error) {
 	// Read entire file into memory to enable seeking to column offsets
 	allData, err := io.ReadAll(r)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading all data: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading all data: %w", err)
 	}
 
 	totalLen := int64(len(allData))
@@ -120,7 +146,7 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 	reader := bytes.NewReader(allData)
 	header, err := ReadHeader(reader)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading header: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading header: %w", err)
 	}
 
 	// Footer is at the end. Since we don't have footer offset in header,
@@ -151,7 +177,7 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 	}
 
 	if footer == nil {
-		return nil, nil, fmt.Errorf("could not find valid footer with %d columns", header.ColumnCount)
+		return nil, nil, nil, fmt.Errorf("could not find valid footer with %d columns", header.ColumnCount)
 	}
 
 	// Build result columns map
@@ -170,11 +196,11 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 			}
 			colData, err := readColumnAt(reader, int64(colMeta.Offset), int64(colMeta.ValuesCount)*8)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			data, err := ReadInt64Column(bytes.NewReader(colData), col)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			result[colMeta.Name] = data
 
@@ -188,11 +214,11 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 			}
 			colData, err := readColumnAt(reader, int64(colMeta.Offset), int64(colMeta.ValuesCount)*4)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			data, err := ReadInt32Column(bytes.NewReader(colData), col)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			result[colMeta.Name] = data
 
@@ -206,11 +232,11 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 			}
 			colData, err := readColumnAt(reader, int64(colMeta.Offset), int64(colMeta.ValuesCount)*4)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			data, err := ReadFloat32Column(bytes.NewReader(colData), col)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			result[colMeta.Name] = data
 
@@ -224,11 +250,11 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 			}
 			colData, err := readColumnAt(reader, int64(colMeta.Offset), int64(colMeta.ValuesCount)*8)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			data, err := ReadFloat64Column(bytes.NewReader(colData), col)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			result[colMeta.Name] = data
 
@@ -242,16 +268,16 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 			}
 			colData, err := readColumnAt(reader, int64(colMeta.Offset), int64(colMeta.ValuesCount)*int64(colMeta.VectorDim)*4)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			data, err := ReadVectorColumn(bytes.NewReader(colData), col)
 			if err != nil {
-				return nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
+				return nil, nil, nil, fmt.Errorf("reading column %s: %w", colMeta.Name, err)
 			}
 			result[colMeta.Name] = data
 
 		default:
-			return nil, nil, fmt.Errorf("unsupported column type: %v", colMeta.Type)
+			return nil, nil, nil, fmt.Errorf("unsupported column type: %v", colMeta.Type)
 		}
 	}
 
@@ -260,7 +286,7 @@ func ReadMSI(r io.Reader) (*TableMetadata, map[string]interface{}, error) {
 		RowCount: header.RowCount,
 	}
 
-	return meta, result, nil
+	return meta, result, footer.SkipIndexData, nil
 }
 
 // readColumnAt reads size bytes from r at the given offset.

@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"os"
 
+	"wormhole/server/storage/index"
 	"wormhole/server/storage/msi"
 )
 
 // ImmutableSegment provides read access to a sealed MSI file on disk.
 type ImmutableSegment struct {
-	path   string
-	meta   *msi.TableMetadata
-	footer *msi.Footer
-	data   map[string]interface{} // column name -> column data
+	path      string
+	meta      *msi.TableMetadata
+	footer    *msi.Footer
+	data      map[string]interface{} // column name -> column data
+	skipIndex *index.SkipIndex
 }
 
 // OpenImmutableSegment opens an MSI file for reading.
@@ -23,9 +25,22 @@ func OpenImmutableSegment(path string) (*ImmutableSegment, error) {
 	}
 	defer f.Close()
 
-	meta, columns, err := msi.ReadMSI(f)
+	meta, columns, skipIndexData, err := msi.ReadMSI(f)
 	if err != nil {
 		return nil, fmt.Errorf("OpenImmutableSegment: ReadMSI failed: %w", err)
+	}
+
+	// Deserialize skip index from footer data if available
+	var skipIdx *index.SkipIndex
+	if len(skipIndexData) > 0 {
+		skipIdx = &index.SkipIndex{}
+		if err := skipIdx.UnmarshalBinary(skipIndexData); err != nil {
+			// If skip index deserialization fails, build from columns
+			skipIdx = index.BuildFromMSI(meta, columns, 1000)
+		}
+	} else {
+		// Fallback: build skip index from columns
+		skipIdx = index.BuildFromMSI(meta, columns, 1000)
 	}
 
 	// Build footer from column metas for reference
@@ -35,10 +50,11 @@ func OpenImmutableSegment(path string) (*ImmutableSegment, error) {
 	}
 
 	return &ImmutableSegment{
-		path:   path,
-		meta:   meta,
-		footer: footer,
-		data:   columns,
+		path:      path,
+		meta:      meta,
+		footer:    footer,
+		data:      columns,
+		skipIndex: skipIdx,
 	}, nil
 }
 
@@ -69,4 +85,18 @@ func (s *ImmutableSegment) RowCount() uint64 {
 // Metadata returns the table metadata.
 func (s *ImmutableSegment) Metadata() *msi.TableMetadata {
 	return s.meta
+}
+
+// SkipIndex returns the segment's skip index for query optimization.
+func (s *ImmutableSegment) SkipIndex() *index.SkipIndex {
+	return s.skipIndex
+}
+
+// CanSkip returns true if this segment can be skipped for the given filter.
+// It checks if all blocks in the skip index indicate the filter can't match.
+func (s *ImmutableSegment) CanSkip(colName string, minVal, maxVal interface{}) bool {
+	if s.skipIndex == nil {
+		return false
+	}
+	return s.skipIndex.CanSkip(colName, minVal, maxVal)
 }

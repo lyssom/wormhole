@@ -7,11 +7,12 @@ import (
 	"io"
 )
 
-// Footer stores column metadata and ANN index offsets.
+// Footer stores column metadata, ANN index offsets, and skip index data.
 // It comes after the row index in the MSI file format.
 type Footer struct {
 	ColumnMetas     []*ColumnMeta
 	AnnIndexOffsets []int64 // 每个列的 ANN 索引偏移量
+	SkipIndexData   []byte  // 序列化的 skip index 数据
 }
 
 // WriteTo serializes the Footer to the given writer.
@@ -54,6 +55,16 @@ func (f *Footer) WriteTo(w io.Writer) error {
 	// Write each ANN index offset
 	for _, offset := range f.AnnIndexOffsets {
 		if err := binary.Write(w, binary.LittleEndian, offset); err != nil {
+			return err
+		}
+	}
+
+	// Write skip index data length and data
+	if err := binary.Write(w, binary.LittleEndian, uint32(len(f.SkipIndexData))); err != nil {
+		return err
+	}
+	if len(f.SkipIndexData) > 0 {
+		if _, err := w.Write(f.SkipIndexData); err != nil {
 			return err
 		}
 	}
@@ -133,6 +144,24 @@ func ReadFooter(r io.Reader) (*Footer, error) {
 	f.AnnIndexOffsets = make([]int64, annIndexCount)
 	for i := uint32(0); i < annIndexCount; i++ {
 		if err := binary.Read(r, binary.LittleEndian, &f.AnnIndexOffsets[i]); err != nil {
+			return nil, err
+		}
+	}
+
+	// Read skip index data length
+	var skipIndexLen uint32
+	if err := binary.Read(r, binary.LittleEndian, &skipIndexLen); err != nil {
+		return nil, err
+	}
+
+	// Read skip index data if present
+	if skipIndexLen > 0 {
+		// Limit size to prevent allocation attacks
+		if skipIndexLen > 10*1024*1024 { // 10MB max
+			return nil, fmt.Errorf("skip index data too large: %d", skipIndexLen)
+		}
+		f.SkipIndexData = make([]byte, skipIndexLen)
+		if _, err := io.ReadFull(r, f.SkipIndexData); err != nil {
 			return nil, err
 		}
 	}

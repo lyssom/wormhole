@@ -156,6 +156,21 @@ func (ms *MutableSegment) RowCount() uint64 {
 	return ms.rowCount
 }
 
+// ReadColumns returns column data from the mutable segment.
+// Returns a map from column name to column data ( []interface{} slices).
+func (ms *MutableSegment) ReadColumns(names []string) (map[string]interface{}, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	result := make(map[string]interface{})
+	for _, name := range names {
+		if col, ok := ms.columns[name]; ok {
+			result[name] = col
+		}
+	}
+	return result, nil
+}
+
 // ShouldSeal returns true if the segment should be sealed (row count reached or time window expired).
 func (ms *MutableSegment) ShouldSeal() bool {
 	ms.mu.Lock()
